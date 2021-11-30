@@ -1,0 +1,113 @@
+from re import L
+from typing import List, Union
+import paddle
+import paddle.nn as nn
+import paddle.nn.functional as F
+from paddle.nn import Layer
+from paddlenlp.transformers import PretrainedModel, register_base_model
+
+
+class LongformerEmbeddings(Layer):
+    """
+    参考了  https://github.com/huggingface/transformers/blob/master/src/transformers/models/longformer/modeling_longformer.py
+    以及    https://github.com/PaddlePaddle/PaddleNLP/blob/develop/paddlenlp/transformers/roberta/modeling.py
+
+    """
+
+    def __init__(self, 
+                vocab_size,
+                hidden_size=768, hidden_dropout_prob=0.1,
+                max_position_embeddings=512,
+                type_vocab_size=16,
+                pad_token_id=0):
+        super().__init__()
+        self.word_embeddings = nn.Embedding(vocab_size, hidden_size, padding_idx=pad_token_id)
+        self.position_embeddings = nn.Embedding(max_position_embeddings, hidden_size, padding_idx=pad_token_id)
+        self.token_type_embeddings = nn.Embedding(type_vocab_size, hidden_size)
+
+        self.LayerNorm = nn.LayerNorm(hidden_size)
+        self.dropout = nn.Dropout(hidden_dropout_prob)
+        self.position_embeddings_type = "absolute"
+        
+    def forward(self, input_ids, token_type_ids=None, position_ids=None):
+        if position_ids is None:
+            # maybe need use shape op to unify static graph and dynamic graph
+            ones = paddle.ones_like(input_ids, dtype="int64")
+            seq_length = paddle.cumsum(ones, axis=-1)
+            position_ids = seq_length - ones
+            position_ids.stop_gradient = True
+        if token_type_ids is None:
+            token_type_ids = paddle.zeros_like(input_ids, dtype="int64")
+
+        input_embedings = self.word_embeddings(input_ids)
+        position_embeddings = self.position_embeddings(position_ids)
+        token_type_embeddings = self.token_type_embeddings(token_type_ids)
+
+        embeddings = input_embedings + position_embeddings + token_type_embeddings
+        embeddings = self.layer_norm(embeddings)
+        embeddings = self.dropout(embeddings)
+
+        return embeddings
+
+
+class LongformerSelfAttention(nn.Layer):
+    """
+    Longformer SelfAttention Layer With Sliding Window Attention And Global Attention
+    """
+    def __init__(self, 
+                 hidden_size=768,
+                 num_attention_heads=3,
+                 attention_probs_dropout_prob=0.1,
+                 attention_window: Union[List[int], int]=512,
+                 layer_id=None):
+        super().__init__()
+        if hidden_size % num_attention_heads != 0:
+            raise ValueError(
+                 f"The hidden size ({hidden_size}) is not a multiple of the number of attention "
+                f"heads ({num_attention_heads})"
+            )
+
+        self.num_heads = num_attention_heads
+        self.head_dim = int(hidden_size / num_attention_heads)
+        self.embed_dim = hidden_size
+
+        self.query = nn.Linear(hidden_size, self.embed_dim)
+        self.key = nn.Linear(hidden_size, self.embed_dim)
+        self.value = nn.Linear(hidden_size, self.embed_dim)
+
+        # separate projection layers for tokens with global attention
+        self.query_global = nn.Linear(hidden_size, self.embed_dim)
+        self.key_global = nn.Linear(hidden_size, self.embed_dim)
+        self.value_global = nn.Linear(hidden_size, self.embed_dim)
+
+        self.dropout = attention_probs_dropout_prob
+
+        self.layer_id = layer_id
+        attention_window = attention_window[self.layer_id]
+        assert (
+            attention_window % 2 == 0
+        ), f"`attention_window` for layer {self.layer_id} has to be an even value. Given {attention_window}"
+        assert (
+            attention_window > 0
+        ), f"`attention_window` for layer {self.layer_id} has to be positive. Given {attention_window}"
+
+        self.one_sided_attn_window_size = attention_window // 2
+
+    def forward(
+        self,
+        hidden_states,
+        attention_mask=None,
+        layer_head_mask=None,
+        is_index_masked=None,
+        is_index_global_attn=None,
+        is_global_attn=None,
+        output_attentions=False,
+    ):
+        """
+        :class:`LongformerSelfAttention` expects `len(hidden_states)` to be multiple of `attention_window`. Padding to
+        `attention_window` happens in :meth:`LongformerModel.forward` to avoid redoing the padding on each layer.
+        The `attention_mask` is changed in :meth:`LongformerModel.forward` from 0, 1, 2 to:
+            * -10000: no attention
+            * 0: local attention
+            * +10000: global attention
+        """   
