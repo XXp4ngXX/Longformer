@@ -12,8 +12,8 @@ from paddlenlp.transformers.attention_utils import _convert_param_attr_to_list, 
 from paddlenlp.transformers import PretrainedModel, register_base_model
 
 """
-由于 Longformer中的attention机制是滑动+全局，与BigBird相比只少了随机attention，BigBird在paddlenlp.transformers 已经实现
-所以 主要参考了  https://github.com/PaddlePaddle/PaddleNLP/blob/develop/paddlenlp/transformers/bigbird/modeling.py
+由于 Longformer中的attention机制是滑动+全局，与LongFormer相比只少了随机attention，LongFormer在paddlenlp.transformers 已经实现
+所以 主要参考了  https://github.com/PaddlePaddle/PaddleNLP/blob/develop/paddlenlp/transformers/LongFormer/modeling.py
 以及    https://github.com/huggingface/transformers/blob/master/src/transformers/models/longformer/modeling_longformer.py
 
 """
@@ -544,13 +544,13 @@ class TransformerEncoder(Layer):
         return output
 
 
-class BigBirdPooler(Layer):
+class LongFormerPooler(Layer):
     """
-    Pool the result of BigBird Encoder
+    Pool the result of LongFormer Encoder
     """
 
     def __init__(self, hidden_size):
-        super(BigBirdPooler, self).__init__()
+        super(LongFormerPooler, self).__init__()
         self.dense = nn.Linear(hidden_size, hidden_size)
         self.activation = nn.Tanh()
 
@@ -563,7 +563,7 @@ class BigBirdPooler(Layer):
         return pooled_output
 
 
-class BigBirdEmbeddings(Layer):
+class LongFormerEmbeddings(Layer):
     """
     Include embeddings from word, position and token_type embeddings
     """
@@ -575,7 +575,7 @@ class BigBirdEmbeddings(Layer):
                  max_position_embeddings=512,
                  type_vocab_size=16,
                  padding_idx=0):
-        super(BigBirdEmbeddings, self).__init__()
+        super(LongFormerEmbeddings, self).__init__()
         self.word_embeddings = nn.Embedding(
             vocab_size, hidden_size, padding_idx=padding_idx)
         self.position_embeddings = nn.Embedding(max_position_embeddings,
@@ -601,9 +601,9 @@ class BigBirdEmbeddings(Layer):
         return embeddings
 
 
-class BigBirdPretrainedModel(PretrainedModel):
+class LongFormerPretrainedModel(PretrainedModel):
     """
-    An abstract class for pretrained BigBird models. It provides BigBird related
+    An abstract class for pretrained LongFormer models. It provides LongFormer related
     `model_config_file`, `pretrained_init_configuration`, `resource_files_names`,
     `pretrained_resource_files_map`, `base_model_prefix` for downloading and
     loading pretrained models.
@@ -612,36 +612,13 @@ class BigBirdPretrainedModel(PretrainedModel):
 
     model_config_file = "model_config.json"
     pretrained_init_configuration = {
-        "bigbird-base-uncased": {
-            "num_layers": 12,
-            "vocab_size": 50358,
-            "nhead": 12,
-            "attn_dropout": 0.1,
-            "dim_feedforward": 3072,
-            "activation": "gelu",
-            "normalize_before": False,
-            "block_size": 16,
-            "window_size": 3,
-            "num_global_blocks": 2,
-            "num_rand_blocks": 3,
-            "seed": None,
-            "pad_token_id": 0,
-            "hidden_size": 768,
-            "hidden_dropout_prob": 0.1,
-            "max_position_embeddings": 4096,
-            "type_vocab_size": 2,
-            "num_labels": 2,
-            "initializer_range": 0.02,
-        },
+        
     }
     resource_files_names = {"model_state": "model_state.pdparams"}
     pretrained_resource_files_map = {
-        "model_state": {
-            "bigbird-base-uncased":
-            "https://paddlenlp.bj.bcebos.com/models/transformers/bigbird/bigbird-base-uncased.pdparams",
-        }
+        
     }
-    base_model_prefix = "bigbird"
+    base_model_prefix = "LongFormer"
 
     def init_weights(self, layer):
         # Initialization hook
@@ -654,16 +631,16 @@ class BigBirdPretrainedModel(PretrainedModel):
                         mean=0.0,
                         std=self.initializer_range
                         if hasattr(self, "initializer_range") else
-                        self.bigbird.config["initializer_range"],
+                        self.LongFormer.config["initializer_range"],
                         shape=layer.weight.shape))
         elif isinstance(layer, nn.LayerNorm):
             layer._epsilon = 1e-12
 
 
 @register_base_model
-class BigBirdModel(BigBirdPretrainedModel):
+class LongFormerModel(LongFormerPretrainedModel):
     """
-    The bare BigBird Model outputting raw hidden-states.
+    The bare LongFormer Model outputting raw hidden-states.
     This model inherits from :class:`~paddlenlp.transformers.model_utils.PretrainedModel`.
     Refer to the superclass documentation for the generic methods.
     This model is also a Paddle `paddle.nn.Layer <https://www.paddlepaddle.org.cn/documentation
@@ -673,8 +650,8 @@ class BigBirdModel(BigBirdPretrainedModel):
         num_layers (int):
             Number of hidden layers in the Transformer encoder.
         vocab_size (int):
-            Vocabulary size of `inputs_ids` in `BigBirdModel`. Also is the vocab size of token embedding matrix.
-            Defines the number of different tokens that can be represented by the `inputs_ids` passed when calling `BigBirdModel`.
+            Vocabulary size of `inputs_ids` in `LongFormerModel`. Also is the vocab size of token embedding matrix.
+            Defines the number of different tokens that can be represented by the `inputs_ids` passed when calling `LongFormerModel`.
         nhead (int):
             Number of attention heads for each attention layer in the Transformer encoder.
         attn_dropout (float, optional):
@@ -711,7 +688,7 @@ class BigBirdModel(BigBirdPretrainedModel):
             The random seed for generating random block id.
             Defaults to ``None``.
         pad_token_id (int, optional):
-            The index of padding token for BigBird embedding.
+            The index of padding token for LongFormer embedding.
             Defaults to ``0``.
         hidden_size (int, optional):
             Dimensionality of the embedding layer, encoder layer and pooler layer.
@@ -746,9 +723,9 @@ class BigBirdModel(BigBirdPretrainedModel):
                  max_position_embeddings=512,
                  type_vocab_size=2,
                  **kwargs):
-        super(BigBirdModel, self).__init__()
+        super(LongFormerModel, self).__init__()
         # embedding
-        self.embeddings = BigBirdEmbeddings(
+        self.embeddings = LongFormerEmbeddings(
             vocab_size, hidden_size, hidden_dropout_prob,
             max_position_embeddings, type_vocab_size, pad_token_id)
 
@@ -760,7 +737,7 @@ class BigBirdModel(BigBirdPretrainedModel):
             attn_dropout,
             activation,
             normalize_before=normalize_before,
-            attention_type="bigbird",
+            attention_type="LongFormer",
             block_size=block_size,
             window_size=window_size,
             num_global_blocks=num_global_blocks,
@@ -768,7 +745,7 @@ class BigBirdModel(BigBirdPretrainedModel):
             seed=seed)
         self.encoder = TransformerEncoder(encoder_layer, num_layers)
         # pooler
-        self.pooler = BigBirdPooler(hidden_size)
+        self.pooler = LongFormerPooler(hidden_size)
         self.pad_token_id = pad_token_id
         self.num_layers = num_layers
 
@@ -790,7 +767,7 @@ class BigBirdModel(BigBirdPretrainedModel):
                 attention_mask_list=None,
                 rand_mask_idx_list=None):
         r"""
-        The BigBirdModel forward method, overrides the __call__() special method.
+        The LongFormerModel forward method, overrides the __call__() special method.
         Args:
             input_ids (`Tensor`):
                 Indices of input sequence tokens in the vocabulary.
@@ -815,7 +792,7 @@ class BigBirdModel(BigBirdPretrainedModel):
                 [batch_size, num_attention_heads, sequence_length, sequence_length].
                 Defaults to `None`, which means nothing needed to be prevented attention to.
             rand_mask_idx_list (`list`, optional):
-                A list which contains some tensors used in bigbird random block.
+                A list which contains some tensors used in LongFormer random block.
         Returns:
             tuple: Returns tuple (`encoder_output`, `pooled_output`).
             With the fields:
@@ -829,10 +806,10 @@ class BigBirdModel(BigBirdPretrainedModel):
         Examples:
             .. code-block::
                 import paddle
-                from paddlenlp.transformers import BigBirdModel, BigBirdTokenizer
-                from paddlenlp.transformers import create_bigbird_rand_mask_idx_list
-                tokenizer = BigBirdTokenizer.from_pretrained('bigbird-base-uncased')
-                model = BigBirdModel.from_pretrained('bigbird-base-uncased')
+                from paddlenlp.transformers import LongFormerModel, LongFormerTokenizer
+                from paddlenlp.transformers import create_LongFormer_rand_mask_idx_list
+                tokenizer = LongFormerTokenizer.from_pretrained('LongFormer-base-uncased')
+                model = LongFormerModel.from_pretrained('LongFormer-base-uncased')
                 config = model.config
                 max_seq_len = 512
                 input_ids = tokenizer.convert_tokens_to_ids(
@@ -849,7 +826,7 @@ class BigBirdModel(BigBirdPretrainedModel):
                 input_ids.extend([0] * (max_seq_len - len(input_ids)))
                 seq_len = len(input_ids)
                 input_ids = paddle.to_tensor([input_ids])
-                rand_mask_idx_list = create_bigbird_rand_mask_idx_list(
+                rand_mask_idx_list = create_LongFormer_rand_mask_idx_list(
                     config["num_layers"], seq_len, seq_len, config["nhead"],
                     config["block_size"], config["window_size"], config["num_global_blocks"],
                     config["num_rand_blocks"], config["seed"])
